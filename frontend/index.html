@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SURAKSHA Authentication</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="page-shell">
+    <section class="login-card" aria-labelledby="app-title">
+      <div class="logo-placeholder" aria-hidden="true"></div>
+      <h1 id="app-title">SURAKSHA Authentication Demo</h1>
+      <p class="subtitle">Passive behavioral authentication prototype</p>
+
+      <form id="loginForm" class="login-form">
+        <label for="username">Username</label>
+        <input id="username" name="username" type="text" autocomplete="username" placeholder="Enter username">
+
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" placeholder="Enter password">
+
+        <div class="button-row">
+          <button id="loginButton" type="submit">Login</button>
+          <button id="botButton" class="secondary" type="button">Simulate Bot</button>
+        </div>
+      </form>
+
+      <section class="result-panel" aria-live="polite">
+        <div class="result-header">
+          <span>Risk score</span>
+          <strong id="riskValue">--</strong>
+        </div>
+        <div class="progress-track" aria-hidden="true">
+          <div id="riskBar" class="progress-bar"></div>
+        </div>
+        <div id="statusMessage" class="status-message">Awaiting login attempt</div>
+        <div id="loadingIndicator" class="loading-indicator" hidden>
+          <span class="spinner" aria-hidden="true"></span>
+          <span>Analyzing behavioral patterns...</span>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
