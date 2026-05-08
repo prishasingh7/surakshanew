@@ -32,6 +32,10 @@
       </form>
 
       <section class="result-panel" aria-live="polite">
+        <div class="classification-row">
+          <span>Classification</span>
+          <strong id="classificationBadge" class="classification-badge classification-idle">Awaiting</strong>
+        </div>
         <div class="result-header">
           <span>Risk score</span>
           <strong id="riskValue">--</strong>
@@ -44,6 +48,14 @@
           <span class="spinner" aria-hidden="true"></span>
           <span>Analyzing behavioral biometrics...</span>
         </div>
+        <section id="reasonsPanel" class="analysis-section" hidden>
+          <h2>Backend reasons</h2>
+          <ul id="reasonsList" class="reasons-list"></ul>
+        </section>
+        <section id="botSignalsPanel" class="analysis-section" hidden>
+          <h2>Bot simulation signals</h2>
+          <ul id="botSignalsList" class="signal-list"></ul>
+        </section>
       </section>
     </section>
   </main>

@@ -15,10 +15,15 @@ const form = document.getElementById("loginForm");
 const honeypotInput = document.getElementById("companyWebsite");
 const loginButton = document.getElementById("loginButton");
 const botButton = document.getElementById("botButton");
+const classificationBadge = document.getElementById("classificationBadge");
 const riskValue = document.getElementById("riskValue");
 const riskBar = document.getElementById("riskBar");
 const statusMessage = document.getElementById("statusMessage");
 const loadingIndicator = document.getElementById("loadingIndicator");
+const reasonsPanel = document.getElementById("reasonsPanel");
+const reasonsList = document.getElementById("reasonsList");
+const botSignalsPanel = document.getElementById("botSignalsPanel");
+const botSignalsList = document.getElementById("botSignalsList");
 
 document.addEventListener("mousemove", captureMouseMovement);
 document.addEventListener("keydown", captureKeyDown);
@@ -103,7 +108,9 @@ async function handleLogin(event) {
   const payload = buildPayload(telemetryState);
 
   console.log("SURAKSHA payload:", payload);
-  await analyzePayload(payload);
+  await analyzePayload(payload, {
+    source: "human"
+  });
   resetCollection();
 }
 
@@ -114,6 +121,15 @@ async function handleBotSimulation() {
   const botSessionStart = performance.now();
   const mouse = generateBotMouseData(botSessionStart);
   const keyboard = generateBotKeyboardData("bot-user", mouse.at(-1)?.t ?? botSessionStart);
+  const botSignals = [
+    "HeadlessChrome + Selenium user agent",
+    "navigator.webdriver set to true",
+    "Zero plugins and zero languages",
+    "SwiftShader software WebGL renderer",
+    "Straight-line constant-interval mouse path",
+    "Fixed keyboard dwell and flight timing",
+    "Very fast first input and submit timing"
+  ];
   const payload = buildPayload({
     mouse,
     keyboard,
@@ -134,17 +150,21 @@ async function handleBotSimulation() {
   });
 
   console.log("SURAKSHA bot payload:", payload);
-  await analyzePayload(payload);
+  await analyzePayload(payload, {
+    source: "bot-simulation",
+    botSignals
+  });
   resetCollection();
 }
 
-async function analyzePayload(payload) {
+async function analyzePayload(payload, context = {}) {
   setLoading(true);
+  clearAnalysisDetails();
 
   try {
     const result = await predictBehavior(payload);
     validatePredictionResponse(result);
-    displayResult(result);
+    displayResult(result, context);
   } catch (error) {
     console.error("SURAKSHA API error:", error);
     displayFallbackError(error);
@@ -229,32 +249,55 @@ function estimateRefreshRate() {
 }
 
 function validatePredictionResponse(result) {
-  if (!Number.isFinite(Number(result.risk_score)) || typeof result.message !== "string") {
-    throw new Error("Prediction API returned an incomplete response");
+  const hasValidScore = Number.isFinite(Number(result?.risk_score));
+  const hasValidClassification = typeof result?.is_human === "boolean";
+  const hasValidMessage = typeof result?.message === "string";
+
+  if (!hasValidScore || !hasValidClassification || !hasValidMessage) {
+    const error = new Error("Prediction API returned an incomplete response");
+    error.code = "MALFORMED";
+    throw error;
   }
 }
 
-function displayResult(result) {
+function displayResult(result, context = {}) {
   const riskScore = clamp(Number(result.risk_score), 0, 1);
   const percent = Math.round(riskScore * 100);
-  const state = getRiskState(riskScore);
+  const state = getRiskState(riskScore, result.is_human);
+  const reasons = Array.isArray(result.reasons) ? result.reasons : [];
 
+  classificationBadge.textContent = state.label;
+  classificationBadge.className = `classification-badge ${state.badgeClass}`;
   riskValue.textContent = `${percent}%`;
   riskBar.style.width = `${percent}%`;
   riskBar.style.backgroundColor = state.color;
   statusMessage.textContent = result.message || state.label;
   statusMessage.className = `status-message ${state.className}`;
+  renderList(reasonsList, reasons);
+  reasonsPanel.hidden = reasons.length === 0;
+
+  if (context.source === "bot-simulation" && Array.isArray(context.botSignals)) {
+    renderList(botSignalsList, context.botSignals);
+    botSignalsPanel.hidden = context.botSignals.length === 0;
+  }
 }
 
 function displayFallbackError(error) {
+  classificationBadge.textContent = "Error";
+  classificationBadge.className = "classification-badge classification-error";
   riskValue.textContent = "--";
   riskBar.style.width = "0%";
   riskBar.style.backgroundColor = "var(--muted)";
   statusMessage.textContent = getFriendlyErrorMessage(error);
   statusMessage.className = "status-message status-suspicious";
+  clearAnalysisDetails();
 }
 
 function getFriendlyErrorMessage(error) {
+  if (error?.code === "CONFIG") {
+    return "Frontend API URL is not configured. Set VITE_API_URL.";
+  }
+
   if (error?.code === "TIMEOUT") {
     return "Prediction request timed out. Please try again.";
   }
@@ -263,13 +306,22 @@ function getFriendlyErrorMessage(error) {
     return "Backend is unavailable. Check the API URL or ngrok tunnel.";
   }
 
+  if (error?.code === "MALFORMED") {
+    return "Backend returned an unreadable response. Please retry the analysis.";
+  }
+
+  if (Number.isFinite(Number(error?.status))) {
+    return `Backend rejected the request with status ${error.status}.`;
+  }
+
   return error?.message || "Unable to complete behavioral analysis.";
 }
 
-function getRiskState(riskScore) {
-  if (riskScore > 0.7) {
+function getRiskState(riskScore, isHuman) {
+  if (isHuman && riskScore > 0.7) {
     return {
       label: "Human",
+      badgeClass: "classification-human",
       className: "status-human",
       color: "var(--human)"
     };
@@ -278,6 +330,7 @@ function getRiskState(riskScore) {
   if (riskScore >= 0.4) {
     return {
       label: "Suspicious",
+      badgeClass: "classification-suspicious",
       className: "status-suspicious",
       color: "var(--suspicious)"
     };
@@ -285,6 +338,7 @@ function getRiskState(riskScore) {
 
   return {
     label: "Bot",
+    badgeClass: "classification-bot",
     className: "status-bot",
     color: "var(--bot)"
   };
@@ -316,11 +370,31 @@ function resetCollection() {
 }
 
 function resetUi() {
+  classificationBadge.textContent = "Awaiting";
+  classificationBadge.className = "classification-badge classification-idle";
   riskValue.textContent = "--";
   riskBar.style.width = "0%";
   riskBar.style.backgroundColor = "var(--muted)";
   statusMessage.textContent = "Awaiting login attempt";
   statusMessage.className = "status-message";
+  clearAnalysisDetails();
+}
+
+function clearAnalysisDetails() {
+  renderList(reasonsList, []);
+  renderList(botSignalsList, []);
+  reasonsPanel.hidden = true;
+  botSignalsPanel.hidden = true;
+}
+
+function renderList(listElement, items) {
+  listElement.replaceChildren();
+
+  items.filter(Boolean).forEach((item) => {
+    const listItem = document.createElement("li");
+    listItem.textContent = String(item);
+    listElement.appendChild(listItem);
+  });
 }
 
 function generateBotMouseData(startTime) {
