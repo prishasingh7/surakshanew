@@ -1,0 +1,25 @@
+{
+  "mouse": [
+    { "x": 100, "y": 200, "t": 0 },
+    { "x": 150, "y": 250, "t": 100 },
+    { "x": 200, "y": 300, "t": 200 },
+    { "x": 250, "y": 350, "t": 300 },
+    { "x": 300, "y": 400, "t": 400 },
+    { "x": 350, "y": 450, "t": 500 }
+  ],
+  "keyboard": [
+    { "key": "s", "down": 600, "up": 650 },
+    { "key": "u", "down": 700, "up": 750 },
+    { "key": "r", "down": 800, "up": 850 },
+    { "key": "a", "down": 900, "up": 950 },
+    { "key": "k", "down": 1000, "up": 1050 },
+    { "key": "s", "down": 1100, "up": 1150 },
+    { "key": "h", "down": 1200, "up": 1250 },
+    { "key": "a", "down": 1300, "up": 1350 }
+  ],
+  "device": {
+    "userAgent": "Mozilla/5.0 HeadlessChrome/124.0 Selenium",
+    "screen": [1920, 1080],
+    "timezone": "Asia/Kolkata"
+  }
+}

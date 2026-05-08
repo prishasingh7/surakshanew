@@ -14,6 +14,11 @@
       <p class="subtitle">Passive behavioral authentication prototype</p>
 
       <form id="loginForm" class="login-form">
+        <label class="honeypot-field" for="companyWebsite" aria-hidden="true">
+          Company website
+          <input id="companyWebsite" name="companyWebsite" type="text" tabindex="-1" autocomplete="off">
+        </label>
+
         <label for="username">Username</label>
         <input id="username" name="username" type="text" autocomplete="username" placeholder="Enter username">
 
@@ -37,12 +42,12 @@
         <div id="statusMessage" class="status-message">Awaiting login attempt</div>
         <div id="loadingIndicator" class="loading-indicator" hidden>
           <span class="spinner" aria-hidden="true"></span>
-          <span>Analyzing behavioral patterns...</span>
+          <span>Analyzing behavioral biometrics...</span>
         </div>
       </section>
     </section>
   </main>
 
-  <script src="script.js"></script>
+  <script type="module" src="script.js"></script>
 </body>
 </html>
