@@ -42,17 +42,6 @@ body {
   box-shadow: var(--shadow);
 }
 
-.logo-placeholder {
-  width: 44px;
-  height: 44px;
-  display: grid;
-  place-items: center;
-  margin: 0 auto 16px;
-  border-radius: 8px;
-  border: 1px dashed var(--border);
-  background: #f7f9fc;
-}
-
 h1 {
   margin: 0;
   font-size: 24px;
