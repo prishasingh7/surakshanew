@@ -195,6 +195,10 @@ button:disabled {
   font-size: 14px;
 }
 
+.loading-indicator[hidden] {
+  display: none;
+}
+
 .spinner {
   width: 16px;
   height: 16px;
