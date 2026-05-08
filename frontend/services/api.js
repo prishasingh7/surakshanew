@@ -55,12 +55,15 @@ export async function predictBehavior(payload) {
       result = await response.json();
     } catch (error) {
       throw createApiError("Prediction API returned malformed JSON", {
+        code: "MALFORMED",
         cause: error
       });
     }
 
     if (typeof result !== "object" || result === null) {
-      throw createApiError("Prediction API returned an invalid response");
+      throw createApiError("Prediction API returned an invalid response", {
+        code: "MALFORMED"
+      });
     }
 
     return result;
