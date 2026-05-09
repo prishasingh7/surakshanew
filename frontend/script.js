@@ -2,6 +2,7 @@ import { predictBehavior } from "./services/api.js";
 import { buildPayload } from "./utils/buildPayload.js";
 
 const MAX_MOUSE_EVENTS = 500;
+const BOT_SESSION_DATA_URL = "/bot-sessions.json";
 
 let mouseData = [];
 let keyData = [];
@@ -10,6 +11,7 @@ let firstInputAt = null;
 let pasteCount = 0;
 let isCapturing = true;
 let deviceData = collectDeviceData();
+let botSessionCache = null;
 
 const form = document.getElementById("loginForm");
 const honeypotInput = document.getElementById("companyWebsite");
@@ -118,43 +120,30 @@ async function handleBotSimulation() {
   isCapturing = false;
   resetUi();
 
-  const botSessionStart = performance.now();
-  const mouse = generateBotMouseData(botSessionStart);
-  const keyboard = generateBotKeyboardData("bot-user", mouse.at(-1)?.t ?? botSessionStart);
-  const botSignals = [
-    "HeadlessChrome + Selenium user agent",
-    "navigator.webdriver set to true",
-    "Zero plugins and zero languages",
-    "SwiftShader software WebGL renderer",
-    "Straight-line constant-interval mouse path",
-    "Fixed keyboard dwell and flight timing",
-    "Very fast first input and submit timing"
-  ];
-  const payload = buildPayload({
-    mouse,
-    keyboard,
-    device: {
-      ...collectDeviceData(),
-      userAgent: "Mozilla/5.0 HeadlessChrome/124.0 Selenium",
-      webdriver: true,
-      pluginsCount: 0,
-      languagesCount: 0,
-      webglVendor: "Google Inc.",
-      webglRenderer: "Google SwiftShader"
-    },
-    sessionStart: botSessionStart,
-    timeToFirstInput: 40,
-    timeToSubmit: 820,
-    pasteCount: 0,
-    honeypotFilled: false
-  });
+  try {
+    const botSession = await pickRandomBotSession();
+    const payload = buildPayload({
+      mouse: botSession.mouse,
+      keyboard: botSession.keyboard,
+      device: botSession.device,
+      sessionStart: 0,
+      timeToFirstInput: estimateTimeToFirstInput(botSession),
+      timeToSubmit: estimateTimeToSubmit(botSession),
+      pasteCount: estimatePasteCount(botSession),
+      honeypotFilled: false
+    });
 
-  console.log("SURAKSHA bot payload:", payload);
-  await analyzePayload(payload, {
-    source: "bot-simulation",
-    botSignals
-  });
-  resetCollection();
+    console.log("SURAKSHA dataset bot payload:", payload);
+    await analyzePayload(payload, {
+      source: "bot-simulation",
+      botSignals: describeBotSession(botSession, payload)
+    });
+  } catch (error) {
+    console.error("SURAKSHA bot session error:", error);
+    displayFallbackError(error);
+  } finally {
+    resetCollection();
+  }
 }
 
 async function analyzePayload(payload, context = {}) {
@@ -310,6 +299,10 @@ function getFriendlyErrorMessage(error) {
     return "Backend returned an unreadable response. Please retry the analysis.";
   }
 
+  if (error?.code === "BOT_DATA") {
+    return "Bot sample data could not be loaded. Please refresh and try again.";
+  }
+
   if (Number.isFinite(Number(error?.status))) {
     return `Backend rejected the request with status ${error.status}.`;
   }
@@ -397,36 +390,151 @@ function renderList(listElement, items) {
   });
 }
 
-function generateBotMouseData(startTime) {
-  const points = [];
-
-  for (let index = 0; index < 80; index += 1) {
-    points.push({
-      x: 120 + index * 6,
-      y: 180 + index * 3,
-      t: startTime + index * 16
-    });
-  }
-
-  return points;
+async function pickRandomBotSession() {
+  const sessions = await loadBotSessions();
+  const index = Math.floor(Math.random() * sessions.length);
+  return sessions[index];
 }
 
-function generateBotKeyboardData(text, startTime) {
-  const entries = [];
-  const delay = 90;
-  const duration = 35;
+async function loadBotSessions() {
+  if (botSessionCache) {
+    return botSessionCache;
+  }
 
-  text.split("").forEach((key, index) => {
-    const down = startTime + 100 + index * delay;
-
-    entries.push({
-      key,
-      down,
-      up: down + duration
-    });
+  const response = await fetch(BOT_SESSION_DATA_URL, {
+    cache: "no-store"
   });
 
-  return entries;
+  if (!response.ok) {
+    const error = new Error("Unable to load bot session dataset.");
+    error.code = "BOT_DATA";
+    throw error;
+  }
+
+  const sessions = await response.json();
+  if (!Array.isArray(sessions) || sessions.length === 0) {
+    const error = new Error("Bot session dataset is empty or malformed.");
+    error.code = "BOT_DATA";
+    throw error;
+  }
+
+  botSessionCache = sessions.filter((session) => (
+    session &&
+    Array.isArray(session.mouse) &&
+    Array.isArray(session.keyboard) &&
+    session.device &&
+    typeof session.device === "object"
+  ));
+
+  if (botSessionCache.length === 0) {
+    const error = new Error("Bot session dataset has no usable sessions.");
+    error.code = "BOT_DATA";
+    throw error;
+  }
+
+  return botSessionCache;
+}
+
+function estimateTimeToFirstInput(session) {
+  const mouseTimes = session.mouse.map((event) => Number(event.t)).filter(Number.isFinite);
+  const keyTimes = session.keyboard.map((event) => Number(event.down)).filter(Number.isFinite);
+  const firstTime = Math.min(...mouseTimes, ...keyTimes);
+  return Number.isFinite(firstTime) ? firstTime : undefined;
+}
+
+function estimateTimeToSubmit(session) {
+  const mouseTimes = session.mouse.map((event) => Number(event.t)).filter(Number.isFinite);
+  const keyTimes = session.keyboard.map((event) => Number(event.up ?? event.down)).filter(Number.isFinite);
+  const lastTime = Math.max(...mouseTimes, ...keyTimes);
+  return Number.isFinite(lastTime) ? lastTime : undefined;
+}
+
+function estimatePasteCount(session) {
+  return session.keyboard.filter((event) => String(event.key).toLowerCase() === "paste").length;
+}
+
+function describeBotSession(session, payload) {
+  const device = payload.device || {};
+  const userAgent = String(device.userAgent || "").toLowerCase();
+  const renderer = String(device.webglRenderer || "").toLowerCase();
+  const signals = [
+    "Random bot session selected from backend dataset",
+    `${payload.mouse.length} mouse events and ${payload.keyboard.length} keyboard events`
+  ];
+
+  if (userAgent.includes("headless") || userAgent.includes("selenium") || userAgent.includes("playwright")) {
+    signals.push("Automation-like user agent present");
+  }
+
+  if (device.webdriver) {
+    signals.push("Webdriver flag present");
+  }
+
+  if (device.pluginsCount === 0) {
+    signals.push("Browser reports zero plugins");
+  }
+
+  if (device.languagesCount === 0) {
+    signals.push("Browser languages are missing");
+  }
+
+  if (renderer.includes("swiftshader") || renderer.includes("software")) {
+    signals.push("Software-rendered WebGL signal present");
+  }
+
+  if (hasLowMouseTimingVariance(payload.mouse)) {
+    signals.push("Mouse timing has low variance");
+  }
+
+  if (hasStraightMousePath(payload.mouse)) {
+    signals.push("Mouse path is unusually straight");
+  }
+
+  if (hasLowKeyboardTimingVariance(payload.keyboard)) {
+    signals.push("Keyboard timing has low variance");
+  }
+
+  if (signals.length === 2) {
+    signals.push("Human-like bot sample with subtle behavioral anomalies");
+  }
+
+  return signals;
+}
+
+function hasLowMouseTimingVariance(mouse) {
+  const intervals = mouse.slice(1).map((event, index) => event.t - mouse[index].t);
+  return intervals.length >= 8 && standardDeviation(intervals) < 12;
+}
+
+function hasLowKeyboardTimingVariance(keyboard) {
+  const dwellTimes = keyboard.map((event) => event.up - event.down);
+  return dwellTimes.length >= 4 && standardDeviation(dwellTimes) < 10;
+}
+
+function hasStraightMousePath(mouse) {
+  if (mouse.length < 3) {
+    return false;
+  }
+
+  const first = mouse[0];
+  const last = mouse[mouse.length - 1];
+  const straightDistance = Math.hypot(last.x - first.x, last.y - first.y);
+  const pathLength = mouse.slice(1).reduce((total, event, index) => {
+    const previous = mouse[index];
+    return total + Math.hypot(event.x - previous.x, event.y - previous.y);
+  }, 0);
+
+  return pathLength > 120 && straightDistance / pathLength > 0.96;
+}
+
+function standardDeviation(values) {
+  if (values.length < 2) {
+    return 0;
+  }
+
+  const average = values.reduce((total, value) => total + value, 0) / values.length;
+  const variance = values.reduce((total, value) => total + (value - average) ** 2, 0) / values.length;
+  return Math.sqrt(variance);
 }
 
 function clamp(value, min, max) {
